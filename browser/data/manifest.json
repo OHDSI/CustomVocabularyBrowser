@@ -1,0 +1,279 @@
+{
+  "schemaVersion": "2.0",
+  "generatedAt": "2026-08-19T14:16:27.736Z",
+  "source": {
+    "provider": "github",
+    "repository": "TuftsCTSI/CVB",
+    "ref": "main",
+    "commit": "bf5701cf37b1ceaa3114eaa493dfba9b6b2c8ec1"
+  },
+  "requiredFiles": [
+    "concept_delta.csv",
+    "concept_synonym_delta.csv",
+    "concept_relationship_delta.csv"
+  ],
+  "vocabularies": [
+    {
+      "packageId": "GIS",
+      "displayName": "GIS",
+      "sourcePath": "GIS/Ontology",
+      "browseable": true,
+      "status": "ready",
+      "vocabularyIds": [
+        "OMOP Exposome",
+        "OMOP GIS",
+        "OMOP SDOH"
+      ],
+      "files": {
+        "concept": "GIS/Ontology/concept_delta.csv",
+        "synonym": "GIS/Ontology/concept_synonym_delta.csv",
+        "relationship": "GIS/Ontology/concept_relationship_delta.csv",
+        "ancestor": "GIS/Ontology/concept_ancestor_delta.csv",
+        "conceptClass": "GIS/Ontology/concept_class_delta.csv",
+        "domain": "GIS/Ontology/domain_delta.csv",
+        "relationshipDefinition": "GIS/Ontology/relationship_delta.csv",
+        "vocabulary": "GIS/Ontology/vocabulary_delta.csv",
+        "mappingMetadata": "GIS/Ontology/mapping_metadata.csv"
+      },
+      "capabilities": {
+        "conceptSearch": true,
+        "synonymSearch": true,
+        "relationships": true,
+        "hierarchy": false,
+        "vocabularyMetadata": true
+      },
+      "counts": {
+        "concepts": 9923,
+        "synonyms": 3,
+        "sourceSynonyms": 3648,
+        "orphanSynonyms": 3645,
+        "relationships": 28646,
+        "relationshipsLocalBoth": 19846,
+        "relationshipsOneLocal": 5800,
+        "relationshipsExternal": 3000,
+        "ancestorRows": 9923,
+        "nonReflexiveAncestorRows": 0,
+        "usableAncestorRows": 0,
+        "locallyRelevantAncestorRows": 9923,
+        "duplicateCodeGroups": 0
+      },
+      "artifacts": {
+        "concepts": "vocabularies/GIS/concepts.json",
+        "search": "vocabularies/GIS/search.json",
+        "synonyms": "vocabularies/GIS/synonyms.json",
+        "relationships": "vocabularies/GIS/relationships.json",
+        "hierarchy": "vocabularies/GIS/hierarchy.json",
+        "metadata": "vocabularies/GIS/metadata.json"
+      },
+      "warnings": [
+        "GIS/Ontology/concept_synonym_delta.csv: 3645 synonym row(s) reference concepts outside the local package and were excluded from search.",
+        "363 concept row(s) exceed the OMOP CDM v5.4 20-character domain_id or concept_class_id width; source values were preserved without truncation.",
+        "GIS/Ontology/concept_ancestor_delta.csv: hierarchy contains no non-reflexive row connected to a local package concept; hierarchy navigation was disabled.",
+        "GIS/Ontology/concept_class_delta.csv metadata disabled: missing required columns: concept_class_id"
+      ],
+      "errors": []
+    },
+    {
+      "packageId": "HPO",
+      "displayName": "HPO",
+      "sourcePath": "HPO",
+      "browseable": false,
+      "status": "missing-required-data",
+      "vocabularyIds": [],
+      "files": {},
+      "capabilities": {
+        "conceptSearch": false,
+        "synonymSearch": false,
+        "relationships": false,
+        "hierarchy": false,
+        "vocabularyMetadata": false
+      },
+      "counts": {
+        "concepts": 0,
+        "synonyms": 0,
+        "sourceSynonyms": 0,
+        "orphanSynonyms": 0,
+        "relationships": 0,
+        "relationshipsLocalBoth": 0,
+        "relationshipsOneLocal": 0,
+        "relationshipsExternal": 0,
+        "ancestorRows": 0,
+        "nonReflexiveAncestorRows": 0,
+        "usableAncestorRows": 0,
+        "locallyRelevantAncestorRows": 0,
+        "duplicateCodeGroups": 0
+      },
+      "artifacts": {},
+      "warnings": [],
+      "errors": [
+        "Missing jointly required files: concept_delta.csv, concept_synonym_delta.csv, concept_relationship_delta.csv."
+      ]
+    },
+    {
+      "packageId": "MIMIC",
+      "displayName": "MIMIC",
+      "sourcePath": "MIMIC/Ontology",
+      "browseable": true,
+      "status": "ready",
+      "vocabularyIds": [
+        "MIMIC4",
+        "OMOP Extension",
+        "Vocabulary"
+      ],
+      "files": {
+        "concept": "MIMIC/Ontology/concept_delta.csv",
+        "synonym": "MIMIC/Ontology/concept_synonym_delta.csv",
+        "relationship": "MIMIC/Ontology/concept_relationship_delta.csv",
+        "ancestor": "MIMIC/Ontology/concept_ancestor_delta.csv",
+        "conceptClass": "MIMIC/Ontology/concept_class_delta.csv",
+        "domain": "MIMIC/Ontology/domain_delta.csv",
+        "relationshipDefinition": "MIMIC/Ontology/relationship_delta.csv",
+        "vocabulary": "MIMIC/Ontology/vocabulary_delta.csv",
+        "mappingMetadata": "MIMIC/Ontology/mapping_metadata.csv"
+      },
+      "capabilities": {
+        "conceptSearch": true,
+        "synonymSearch": true,
+        "relationships": true,
+        "hierarchy": true,
+        "vocabularyMetadata": true
+      },
+      "counts": {
+        "concepts": 24434,
+        "synonyms": 12024,
+        "sourceSynonyms": 12024,
+        "orphanSynonyms": 0,
+        "relationships": 57888,
+        "relationshipsLocalBoth": 4496,
+        "relationshipsOneLocal": 53392,
+        "relationshipsExternal": 0,
+        "ancestorRows": 1616,
+        "nonReflexiveAncestorRows": 1616,
+        "usableAncestorRows": 1616,
+        "locallyRelevantAncestorRows": 1616,
+        "duplicateCodeGroups": 0
+      },
+      "artifacts": {
+        "concepts": "vocabularies/MIMIC/concepts.json",
+        "search": "vocabularies/MIMIC/search.json",
+        "synonyms": "vocabularies/MIMIC/synonyms.json",
+        "relationships": "vocabularies/MIMIC/relationships.json",
+        "hierarchy": "vocabularies/MIMIC/hierarchy.json",
+        "metadata": "vocabularies/MIMIC/metadata.json"
+      },
+      "warnings": [],
+      "errors": []
+    },
+    {
+      "packageId": "PSYCHIATRY",
+      "displayName": "PSYCHIATRY",
+      "sourcePath": "PSYCHIATRY/Ontology",
+      "browseable": true,
+      "status": "ready",
+      "vocabularyIds": [
+        "PSYCHIATRY"
+      ],
+      "files": {
+        "concept": "PSYCHIATRY/Ontology/concept_delta.csv",
+        "synonym": "PSYCHIATRY/Ontology/concept_synonym_delta.csv",
+        "relationship": "PSYCHIATRY/Ontology/concept_relationship_delta.csv",
+        "ancestor": "PSYCHIATRY/Ontology/concept_ancestor_delta.csv",
+        "conceptClass": "PSYCHIATRY/Ontology/concept_class_delta.csv",
+        "domain": "PSYCHIATRY/Ontology/domain_delta.csv",
+        "relationshipDefinition": "PSYCHIATRY/Ontology/relationship_delta.csv",
+        "vocabulary": "PSYCHIATRY/Ontology/vocabulary_delta.csv",
+        "mappingMetadata": "PSYCHIATRY/Ontology/mapping_metadata.csv"
+      },
+      "capabilities": {
+        "conceptSearch": true,
+        "synonymSearch": true,
+        "relationships": true,
+        "hierarchy": true,
+        "vocabularyMetadata": true
+      },
+      "counts": {
+        "concepts": 109,
+        "synonyms": 109,
+        "sourceSynonyms": 109,
+        "orphanSynonyms": 0,
+        "relationships": 252,
+        "relationshipsLocalBoth": 144,
+        "relationshipsOneLocal": 108,
+        "relationshipsExternal": 0,
+        "ancestorRows": 59,
+        "nonReflexiveAncestorRows": 23,
+        "usableAncestorRows": 23,
+        "locallyRelevantAncestorRows": 59,
+        "duplicateCodeGroups": 36
+      },
+      "artifacts": {
+        "concepts": "vocabularies/PSYCHIATRY/concepts.json",
+        "search": "vocabularies/PSYCHIATRY/search.json",
+        "synonyms": "vocabularies/PSYCHIATRY/synonyms.json",
+        "relationships": "vocabularies/PSYCHIATRY/relationships.json",
+        "hierarchy": "vocabularies/PSYCHIATRY/hierarchy.json",
+        "metadata": "vocabularies/PSYCHIATRY/metadata.json"
+      },
+      "warnings": [
+        "36 duplicate (vocabulary_id, concept_code) group(s) were retained as distinct concepts."
+      ],
+      "errors": []
+    },
+    {
+      "packageId": "WAVEFORM",
+      "displayName": "WAVEFORM",
+      "sourcePath": "WAVEFORM/Ontology",
+      "browseable": true,
+      "status": "ready",
+      "vocabularyIds": [
+        "WAVEFORM"
+      ],
+      "files": {
+        "concept": "WAVEFORM/Ontology/concept_delta.csv",
+        "synonym": "WAVEFORM/Ontology/concept_synonym_delta.csv",
+        "relationship": "WAVEFORM/Ontology/concept_relationship_delta.csv",
+        "ancestor": "WAVEFORM/Ontology/concept_ancestor_delta.csv",
+        "conceptClass": "WAVEFORM/Ontology/concept_class_delta.csv",
+        "domain": "WAVEFORM/Ontology/domain_delta.csv",
+        "relationshipDefinition": "WAVEFORM/Ontology/relationship_delta.csv",
+        "vocabulary": "WAVEFORM/Ontology/vocabulary_delta.csv",
+        "mappingMetadata": "WAVEFORM/Ontology/mapping_metadata.csv"
+      },
+      "capabilities": {
+        "conceptSearch": true,
+        "synonymSearch": true,
+        "relationships": true,
+        "hierarchy": false,
+        "vocabularyMetadata": true
+      },
+      "counts": {
+        "concepts": 53,
+        "synonyms": 34,
+        "sourceSynonyms": 34,
+        "orphanSynonyms": 0,
+        "relationships": 106,
+        "relationshipsLocalBoth": 102,
+        "relationshipsOneLocal": 4,
+        "relationshipsExternal": 0,
+        "ancestorRows": 50,
+        "nonReflexiveAncestorRows": 0,
+        "usableAncestorRows": 0,
+        "locallyRelevantAncestorRows": 50,
+        "duplicateCodeGroups": 1
+      },
+      "artifacts": {
+        "concepts": "vocabularies/WAVEFORM/concepts.json",
+        "search": "vocabularies/WAVEFORM/search.json",
+        "synonyms": "vocabularies/WAVEFORM/synonyms.json",
+        "relationships": "vocabularies/WAVEFORM/relationships.json",
+        "hierarchy": "vocabularies/WAVEFORM/hierarchy.json",
+        "metadata": "vocabularies/WAVEFORM/metadata.json"
+      },
+      "warnings": [
+        "1 duplicate (vocabulary_id, concept_code) group(s) were retained as distinct concepts.",
+        "WAVEFORM/Ontology/concept_ancestor_delta.csv: hierarchy contains no non-reflexive row connected to a local package concept; hierarchy navigation was disabled."
+      ],
+      "errors": []
+    }
+  ]
+}

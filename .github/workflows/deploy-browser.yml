@@ -1,0 +1,80 @@
+name: Deploy vocabulary browser to Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out browser
+        uses: actions/checkout@v7
+
+      - name: Check out CVB source
+        uses: actions/checkout@v7
+        with:
+          repository: TuftsCTSI/CVB
+          ref: main
+          path: .source/CVB
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install build tooling
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Resolve CVB source commit
+        id: cvb
+        shell: bash
+        run: echo "sha=$(git -C .source/CVB rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build browser data
+        run: >-
+          npm run build:data --
+          --source .source/CVB
+          --repository TuftsCTSI/CVB
+          --ref main
+          --commit ${{ steps.cvb.outputs.sha }}
+
+      - name: Validate and package static site
+        run: |
+          npm run validate:data
+          npm run build:site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
