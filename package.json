@@ -1,0 +1,18 @@
+{
+  "name": "cvb-omop-custom-vocabulary-browser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Static Athena-style browser for OMOP-compatible CVB vocabularies",
+  "scripts": {
+    "test": "node --test",
+    "build:data": "node scripts/build-browser-data.mjs",
+    "validate:data": "node scripts/validate-browser-data.mjs",
+    "benchmark": "node scripts/benchmark-search.mjs",
+    "build:site": "node scripts/build-site.mjs",
+    "serve": "node scripts/serve-site.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

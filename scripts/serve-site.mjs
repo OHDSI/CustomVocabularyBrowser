@@ -1,0 +1,155 @@
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import http from "node:http";
+import path from "node:path";
+import process from "node:process";
+import { pipeline } from "node:stream/promises";
+import { fileURLToPath } from "node:url";
+import { createGzip } from "node:zlib";
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(SCRIPT_DIR, "..");
+const DEFAULT_ROOT = path.join(PROJECT_ROOT, "dist");
+const DEFAULT_HOST = "127.0.0.1";
+const DEFAULT_PORT = 4173;
+
+const CONTENT_TYPES = Object.freeze({
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml; charset=utf-8",
+  ".ttf": "font/ttf",
+  ".txt": "text/plain; charset=utf-8",
+});
+
+const COMPRESSIBLE_EXTENSIONS = new Set([".css", ".html", ".js", ".json", ".map", ".svg", ".txt"]);
+
+export function createStaticServer({ root = DEFAULT_ROOT } = {}) {
+  const resolvedRoot = path.resolve(root);
+  return http.createServer((request, response) => {
+    void handleRequest(request, response, resolvedRoot);
+  });
+}
+
+export async function startStaticServer({ root = DEFAULT_ROOT, host = DEFAULT_HOST, port = DEFAULT_PORT } = {}) {
+  const resolvedPort = parsePort(port);
+  const server = createStaticServer({ root });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(resolvedPort, host, () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  return server;
+}
+
+async function handleRequest(request, response, root) {
+  if (!request.url || !["GET", "HEAD"].includes(request.method ?? "")) {
+    sendText(response, 405, "Method not allowed.", { Allow: "GET, HEAD" });
+    return;
+  }
+
+  const filename = resolveRequestPath(root, request.url);
+  if (!filename) {
+    sendText(response, 400, "Invalid request path.");
+    return;
+  }
+
+  let fileStat;
+  try {
+    fileStat = await stat(filename);
+  } catch {
+    sendText(response, 404, "Not found.");
+    return;
+  }
+  if (!fileStat.isFile()) {
+    sendText(response, 404, "Not found.");
+    return;
+  }
+
+  const extension = path.extname(filename).toLowerCase();
+  const acceptsGzip = /(?:^|,)\s*gzip\s*(?:,|$)/iu.test(request.headers["accept-encoding"] ?? "");
+  const useGzip = acceptsGzip && fileStat.size >= 1024 && COMPRESSIBLE_EXTENSIONS.has(extension);
+  const headers = {
+    "Cache-Control": "no-store",
+    "Content-Type": CONTENT_TYPES[extension] ?? "application/octet-stream",
+    "X-Content-Type-Options": "nosniff",
+  };
+  if (useGzip) {
+    headers["Content-Encoding"] = "gzip";
+    headers.Vary = "Accept-Encoding";
+  } else {
+    headers["Content-Length"] = String(fileStat.size);
+  }
+  response.writeHead(200, headers);
+  if (request.method === "HEAD") {
+    response.end();
+    return;
+  }
+
+  try {
+    const source = createReadStream(filename);
+    if (useGzip) await pipeline(source, createGzip({ level: 6 }), response);
+    else await pipeline(source, response);
+  } catch {
+    response.destroy();
+  }
+}
+
+function resolveRequestPath(root, requestUrl) {
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(requestUrl, "http://localhost").pathname);
+  } catch {
+    return null;
+  }
+  if (pathname.includes("\\")) return null;
+  if (/[\u0000-\u001f\u007f]/u.test(pathname)) return null;
+  const relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+  const filename = path.resolve(root, relative);
+  return filename === root || filename.startsWith(`${root}${path.sep}`) ? filename : null;
+}
+
+function sendText(response, status, message, additionalHeaders = {}) {
+  response.writeHead(status, {
+    ...additionalHeaders,
+    "Cache-Control": "no-store",
+    "Content-Type": "text/plain; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  });
+  response.end(message);
+}
+
+function parsePort(value) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 65_535) {
+    throw new Error(`Invalid port: ${value}.`);
+  }
+  return parsed;
+}
+
+function argumentValue(name, fallback) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : fallback;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const root = path.resolve(argumentValue("--directory", DEFAULT_ROOT));
+  const host = argumentValue("--host", DEFAULT_HOST);
+  const port = parsePort(argumentValue("--port", DEFAULT_PORT));
+  try {
+    await stat(path.join(root, "index.html"));
+    await startStaticServer({ root, host, port });
+    console.log(`CVB browser: http://${host}:${port}/`);
+    console.log(`Serving: ${root}`);
+    console.log("Press Ctrl+C to stop.");
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
+}

@@ -1,0 +1,57 @@
+name: Test vocabulary browser
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out browser
+        uses: actions/checkout@v7
+
+      - name: Check out CVB source
+        uses: actions/checkout@v7
+        with:
+          repository: TuftsCTSI/CVB
+          ref: main
+          path: .source/CVB
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install build tooling
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Resolve CVB source commit
+        id: cvb
+        shell: bash
+        run: echo "sha=$(git -C .source/CVB rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build browser data
+        run: >-
+          npm run build:data --
+          --source .source/CVB
+          --repository TuftsCTSI/CVB
+          --ref main
+          --commit ${{ steps.cvb.outputs.sha }}
+
+      - name: Validate generated data
+        run: npm run validate:data
+
+      - name: Package static site
+        run: npm run build:site

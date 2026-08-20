@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="referrer" content="no-referrer">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'none'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; font-src 'self'; form-action 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'"
+    >
+    <title>Custom Vocabulary Browser</title>
+    <link rel="stylesheet" href="css/vocabulary-browser.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#results-heading">Skip to results</a>
+
+    <header class="site-header">
+      <div class="header-copy">
+        <h1>Custom Vocabulary Browser</h1>
+        <p class="lede">Search concepts, inspect mappings, and review source provenance.</p>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="panel source-panel" aria-labelledby="source-heading">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">Source</p>
+            <h2 id="source-heading">Choose a GitHub repository or local folder</h2>
+          </div>
+          <p id="active-source" class="source-chip" aria-live="polite"></p>
+        </div>
+
+        <form id="source-form" class="source-form" novalidate>
+          <div class="field source-field">
+            <label for="source-input">GitHub repository or URL</label>
+            <input
+              id="source-input"
+              name="source"
+              type="text"
+              inputmode="url"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="source-help"
+              placeholder="owner/repository@ref or https://github.com/owner/repository"
+              required
+            >
+            <p id="source-help" class="field-help">
+              Public GitHub repositories only. Paste <code>owner/repository@ref</code> or a full GitHub URL; the ref defaults to <code>main</code>.
+            </p>
+          </div>
+          <div class="button-row source-actions">
+            <button class="button button-primary" type="submit">Load source</button>
+            <button id="default-source" class="button button-secondary" type="button">Use default</button>
+            <button id="local-source" class="button button-secondary" type="button">Choose local folder</button>
+            <input id="local-folder-input" type="file" accept=".csv,text/csv" webkitdirectory multiple hidden>
+          </div>
+        </form>
+        <p class="local-source-help">
+          Local files stay on this computer and are processed only in browser memory. Select a vocabulary folder,
+          its <code>Ontology</code> folder, or a CVB-style repository root.
+        </p>
+
+        <div class="field package-field">
+          <label for="package-select">Vocabulary package</label>
+          <select id="package-select" disabled>
+            <option value="">Load a source to see packages</option>
+          </select>
+          <p id="package-help" class="field-help">Unavailable packages remain visible with their validation status.</p>
+        </div>
+      </section>
+
+      <section class="panel search-panel" aria-labelledby="search-heading">
+        <div class="section-heading search-heading-row">
+          <div>
+            <p class="step-label">Search</p>
+            <h2 id="search-heading">Search concepts</h2>
+          </div>
+          <button id="clear-all" class="button button-quiet" type="button">Clear all filters</button>
+        </div>
+
+        <div class="search-row">
+          <div class="field query-field">
+            <label for="query-input">Concept ID, code, name, or synonym</label>
+            <div class="input-action">
+              <input id="query-input" type="search" autocomplete="off" placeholder="Start typing to search">
+              <button id="clear-query" class="button button-secondary" type="button">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="filter-grid" class="filter-grid">
+          <div class="field">
+            <label for="filter-vocabulary">Vocabulary</label>
+            <select id="filter-vocabulary" data-filter="vocabularyId"></select>
+          </div>
+          <div class="field">
+            <label for="filter-domain">Domain</label>
+            <select id="filter-domain" data-filter="domainId"></select>
+          </div>
+          <div class="field">
+            <label for="filter-class">Concept class</label>
+            <select id="filter-class" data-filter="conceptClassId"></select>
+          </div>
+          <div class="field">
+            <label for="filter-standard">Standard concept</label>
+            <select id="filter-standard" data-filter="standardConcept"></select>
+          </div>
+          <div class="field">
+            <label for="filter-validity">Validity</label>
+            <select id="filter-validity" data-filter="invalidReason"></select>
+          </div>
+        </div>
+      </section>
+
+      <section id="status-panel" class="status-panel" aria-live="polite" aria-atomic="true" hidden>
+        <span id="status-indicator" class="status-indicator" aria-hidden="true"></span>
+        <div>
+          <strong id="status-title"></strong>
+          <p id="status-message"></p>
+        </div>
+      </section>
+
+      <section class="panel results-panel" aria-labelledby="results-heading">
+        <div class="results-toolbar">
+          <div>
+            <p class="step-label">Results</p>
+            <h2 id="results-heading">Concepts</h2>
+            <p id="results-summary" class="results-summary" aria-live="polite">No package loaded.</p>
+          </div>
+          <div class="field page-size-field">
+            <label for="page-size">Rows per page</label>
+            <select id="page-size"></select>
+          </div>
+        </div>
+
+        <div class="table-frame" tabindex="0" aria-label="Scrollable concept results">
+          <table id="results-table">
+            <caption class="sr-only">OMOP custom vocabulary concept search results</caption>
+            <thead>
+              <tr>
+                <th scope="col" data-sort="conceptId">Concept ID</th>
+                <th scope="col" data-sort="conceptName">Name</th>
+                <th scope="col" data-sort="domainId">Domain</th>
+                <th scope="col" data-sort="vocabularyId">Vocabulary</th>
+                <th scope="col" data-sort="conceptClassId">Class</th>
+                <th scope="col" data-sort="standardConcept">Standard</th>
+                <th scope="col" data-sort="conceptCode">Code</th>
+                <th scope="col" data-sort="invalidReason">Validity</th>
+                <th scope="col">Match reason</th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
+
+        <nav id="pagination" class="pagination" aria-label="Results pages"></nav>
+      </section>
+    </main>
+
+    <dialog id="concept-dialog" class="concept-dialog" aria-labelledby="concept-dialog-title">
+      <div class="dialog-header">
+        <div>
+          <p class="step-label">Concept detail</p>
+          <h2 id="concept-dialog-title">Concept</h2>
+        </div>
+        <form method="dialog">
+          <button class="icon-button" type="submit" aria-label="Close concept details">×</button>
+        </form>
+      </div>
+      <div id="concept-dialog-content" class="dialog-content"></div>
+    </dialog>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
