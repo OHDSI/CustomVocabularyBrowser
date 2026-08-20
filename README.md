@@ -1,4 +1,4 @@
-# Custom Vocabulary Browser
+# [Custom Vocabulary Browser](https://p-talapova.github.io/CustomVocabularyBrowser/)
 
 Custom Vocabulary Browser is a static web application for finding and reviewing
 OMOP-compatible concepts maintained outside the standard Athena distribution.
