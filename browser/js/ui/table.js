@@ -1,3 +1,4 @@
+import { sourceSystemValues } from "../model/sourceSystems.js";
 import { clearNode, displayValue, makeElement } from "./dom.js";
 
 const MATCH_LABELS = Object.freeze({
@@ -58,7 +59,7 @@ export function createResultsTable({ onSort, onSelect }) {
 function renderRow(item, selectedConceptId, onSelect) {
   const concept = item.concept;
   const row = makeElement("tr");
-  if (concept.conceptId === selectedConceptId) {
+  if ((concept.key ?? concept.conceptId) === selectedConceptId) {
     row.classList.add("is-selected");
     row.setAttribute("aria-current", "true");
   }
@@ -69,10 +70,27 @@ function renderRow(item, selectedConceptId, onSelect) {
     text: concept.conceptId,
     attributes: { type: "button", "aria-label": `Open details for ${concept.conceptName}` },
   });
-  openButton.addEventListener("click", () => onSelect(concept.conceptId));
-  idCell.append(openButton);
+  openButton.addEventListener("click", () => onSelect(concept.key ?? concept.conceptId));
+  const copyButton = makeElement("button", { className: "copy-id-button", text: "⧉", attributes: { type: "button", "aria-label": `Copy concept ID ${concept.conceptId}`, title: "Copy concept ID" } });
+  copyButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(String(concept.conceptId));
+      copyButton.textContent = "✓";
+      copyButton.setAttribute("aria-label", "Concept ID copied");
+      copyButton.title = "Concept ID copied";
+    } catch {
+      copyButton.textContent = "!";
+      copyButton.title = "Copy unavailable. Select and copy the concept ID.";
+      copyButton.setAttribute("aria-label", copyButton.title);
+    }
+  });
+  idCell.append(openButton, copyButton);
 
-  const nameCell = makeElement("td", { className: "concept-name", text: concept.conceptName });
+  const nameCell = makeElement("td", { className: "concept-name" });
+  const nameButton = makeElement("button", { className: "concept-link concept-name-link", text: concept.conceptName, attributes: { type: "button" } });
+  nameButton.addEventListener("click", () => onSelect(concept.key ?? concept.conceptId));
+  nameCell.append(nameButton);
+  const sourceCell = makeElement("td", { text: sourceSystemLabel(concept) });
   const domainCell = makeElement("td", { text: concept.domainId });
   const vocabularyCell = makeElement("td", { text: concept.vocabularyId });
   const classCell = makeElement("td", { text: concept.conceptClassId });
@@ -95,6 +113,7 @@ function renderRow(item, selectedConceptId, onSelect) {
     standardCell,
     codeCell,
     validityCell,
+    sourceCell,
     matchCell,
   );
   return row;
@@ -111,7 +130,7 @@ function addMessageRow(body, message) {
   row.append(makeElement("td", {
     className: "table-message",
     text: message,
-    attributes: { colspan: "9" },
+    attributes: { colspan: "10" },
   }));
   body.append(row);
 }
@@ -135,4 +154,8 @@ function validityLabel(value) {
 function matchLabel(match) {
   if (!match) return "All concepts";
   return MATCH_LABELS[match.type] ?? "Lexical match";
+}
+
+export function sourceSystemLabel(concept) {
+  return sourceSystemValues(concept).filter(value => value !== null).join(" \u00b7 ") || "Not supplied";
 }

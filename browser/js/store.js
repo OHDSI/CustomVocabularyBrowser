@@ -2,6 +2,7 @@ import { DEFAULT_PAGE_SIZE, DEFAULT_SOURCE } from "./config.js";
 import { SearchService } from "./services/searchService.js";
 
 const FILTER_FIELDS = Object.freeze([
+  "sourceSystem",
   "vocabularyId",
   "domainId",
   "conceptClassId",
@@ -14,11 +15,12 @@ export class BrowserStore {
     this.listeners = new Set();
     this.searchService = null;
     this.state = {
-      source: initial.source ?? DEFAULT_SOURCE,
+      source: initial.source === undefined ? DEFAULT_SOURCE : initial.source,
       manifest: null,
       repository: null,
       selectedPackageId: initial.selectedPackageId ?? null,
       dataset: null,
+      facetConcepts: [],
       query: initial.query ?? "",
       filters: Object.fromEntries(
         FILTER_FIELDS.map((field) => [field, normalizeFilter(initial.filters?.[field])]),
@@ -47,11 +49,20 @@ export class BrowserStore {
   }
 
   setSource(source) {
+    // Clear private local search state before publishing any non-local state.
+    // The same emit must never combine a remote source with local query data.
+    if (this.state.source?.provider === "local-directory" && source?.provider !== "local-directory") {
+      this.state.query = "";
+      this.state.filters = Object.fromEntries(FILTER_FIELDS.map((field) => [field, []]));
+      this.state.page = 1;
+      this.state.sort = null;
+    }
     this.state.source = source;
     this.state.manifest = null;
     this.state.repository = null;
     this.state.selectedPackageId = null;
     this.state.dataset = null;
+    this.state.facetConcepts = [];
     this.state.selectedConceptId = null;
     this.searchService = null;
     this.state.results = emptyResults(this.state.pageSize);
@@ -67,6 +78,7 @@ export class BrowserStore {
   setSelectedPackage(packageId) {
     this.state.selectedPackageId = packageId;
     this.state.dataset = null;
+    this.state.facetConcepts = [];
     this.state.selectedConceptId = null;
     this.state.page = 1;
     this.searchService = null;
@@ -151,6 +163,7 @@ export class BrowserStore {
       this.#emit();
       return;
     }
+    this.state.facetConcepts = this.searchService.matchingConcepts(this.state.query);
     this.state.results = this.searchService.search({
       query: this.state.query,
       filters: this.state.filters,

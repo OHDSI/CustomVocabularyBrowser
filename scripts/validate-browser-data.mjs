@@ -1,7 +1,9 @@
+import { conceptCodeKey } from "../browser/js/model/codeMatching.js";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { MAX_PUBLISHED_FILE_BYTES, MAPPING_CHUNK_LIMIT_BYTES } from "./build-browser-data.mjs";
 import { parseIdentifier, parseNullableFlag, validateDate } from "../browser/js/model/concept.js";
 import {
   ARTIFACT_SCHEMA_VERSION,
@@ -52,6 +54,7 @@ export async function validateBrowserData(dataRoot = path.join(PROJECT_ROOT, "br
     const hierarchy = entry.artifacts?.hierarchy
       ? await readArtifact(root, entry, "hierarchy", errors)
       : null;
+    if (entry.artifacts?.metadata) await validateMetadataArtifact(root, entry, errors);
     if (!concepts || !search || !synonyms || !relationships) continue;
 
     if (!Array.isArray(concepts.concepts)) {
@@ -66,7 +69,7 @@ export async function validateBrowserData(dataRoot = path.join(PROJECT_ROOT, "br
     validateRelationships(entry.packageId, relationships, errors);
     if (entry.counts.concepts !== concepts.concepts.length) errors.push(`${entry.packageId} concept count mismatch.`);
     if (entry.counts.synonyms !== synonymRows.length) errors.push(`${entry.packageId} synonym count mismatch.`);
-    if (entry.counts.sourceSynonyms !== entry.counts.synonyms + entry.counts.orphanSynonyms) {
+    if (entry.counts.sourceSynonyms + (entry.counts.fallbackSynonyms ?? 0) !== entry.counts.synonyms + entry.counts.orphanSynonyms) {
       errors.push(`${entry.packageId} source/orphan synonym counts are inconsistent.`);
     }
     if (entry.counts.relationships !== relationships.rows.length) errors.push(`${entry.packageId} relationship count mismatch.`);
@@ -128,6 +131,12 @@ async function readArtifact(root, entry, key, errors) {
     return null;
   }
   try {
+    // Legacy inline metadata may be larger than the publication safety limit.
+    // Keep it usable locally; the publication preflight reports that risk.
+    if (key !== "metadata" && (await stat(absolute)).size >= MAX_PUBLISHED_FILE_BYTES) {
+      errors.push(`${entry.packageId} ${key} artifact reaches the internal 100,000,000-byte safety limit.`);
+      return null;
+    }
     const artifact = await readJson(absolute);
     if (artifact.schemaVersion !== ARTIFACT_SCHEMA_VERSION) {
       errors.push(`${entry.packageId} ${key} artifact has unsupported schema ${artifact.schemaVersion}.`);
@@ -140,6 +149,55 @@ async function readArtifact(root, entry, key, errors) {
     errors.push(`${entry.packageId} ${key} artifact cannot be read: ${error.message}`);
     return null;
   }
+}
+
+// Validate optional mapping chunks without merging them into a potentially huge
+// array. Descriptors may name only sequential files in the metadata directory.
+export async function validateMetadataArtifact(root, entry, errors, options = {}) {
+  const metadata = await readArtifact(root, entry, "metadata", errors);
+  if (!metadata) return;
+  const chunks = metadata.mappingMetadataChunks;
+  const total = metadata.mappingMetadataTotal;
+  if (chunks === undefined) {
+    if (total !== undefined) errors.push(`${entry.packageId} mapping metadata total has no chunks.`);
+    return;
+  }
+  const metadataPath = path.resolve(root, ...entry.artifacts.metadata.split("/"));
+  if ((await stat(metadataPath)).size >= (options.maxMetadataBytes ?? MAX_PUBLISHED_FILE_BYTES)) {
+    errors.push(`${entry.packageId} chunked metadata index reaches the publication safety limit.`);
+    return;
+  }
+  if (metadata.packageId !== entry.packageId) {
+    errors.push(`${entry.packageId} chunked mapping metadata package mismatch.`);
+    return;
+  }
+  if (!Array.isArray(chunks) || chunks.length === 0 || !Number.isSafeInteger(total) || total <= 0) {
+    errors.push(`${entry.packageId} mapping metadata chunk descriptors or total are invalid.`);
+    return;
+  }
+  if (!Array.isArray(metadata.tables?.mappingMetadata) || metadata.tables.mappingMetadata.length !== 0) {
+    errors.push(`${entry.packageId} chunked mapping metadata must have an empty inline table.`);
+    return;
+  }
+  let counted = 0;
+  for (let index = 0; index < chunks.length; index += 1) {
+    const descriptor = chunks[index];
+    const expected = `mapping-metadata-${String(index + 1).padStart(5, "0")}.json`;
+    if (!descriptor || descriptor.file !== expected || !Number.isSafeInteger(descriptor.count) || descriptor.count <= 0 || index >= 99999) {
+      errors.push(`${entry.packageId} mapping metadata chunk descriptor ${index + 1} is invalid.`);
+      continue;
+    }
+    try {
+      const filename = path.join(path.dirname(metadataPath), descriptor.file);
+      if ((await stat(filename)).size > MAPPING_CHUNK_LIMIT_BYTES) throw new Error("chunk exceeds 20 MiB");
+      const rows = await readJson(filename);
+      if (!Array.isArray(rows) || rows.length !== descriptor.count || rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))) {
+        throw new Error("chunk rows or count are invalid");
+      }
+      counted += rows.length;
+    } catch (error) { errors.push(`${entry.packageId} mapping metadata chunk ${index + 1} cannot be read or validated: ${error.message}`); }
+  }
+  if (counted !== total) errors.push(`${entry.packageId} mapping metadata total does not match chunk rows.`);
 }
 
 function validateConcepts(packageId, concepts, errors) {
@@ -193,7 +251,9 @@ function validateSynonyms(packageId, artifact, conceptIds, errors) {
       const label = `${packageId} synonym ${conceptId}[${ordinal}]`;
       if (synonym.conceptId !== conceptId) errors.push(`${label} is stored under the wrong concept ID.`);
       validateNonBlankText(synonym.conceptSynonymName, `${label} conceptSynonymName`, errors);
-      validateIdentifierValue(synonym.languageConceptId, `${label} languageConceptId`, errors);
+      if (!(synonym.sourceDerived === true && synonym.languageConceptId === null && typeof synonym.sourceFile === "string")) {
+        validateIdentifierValue(synonym.languageConceptId, `${label} languageConceptId`, errors);
+      }
       if (!Number.isInteger(synonym.sourceRow) || synonym.sourceRow < 2) {
         errors.push(`${label} has invalid sourceRow.`);
       }
@@ -214,8 +274,10 @@ function validateRelationships(packageId, artifact, errors) {
     validateIdentifierValue(row.conceptId1, `${label} conceptId1`, errors);
     validateIdentifierValue(row.conceptId2, `${label} conceptId2`, errors);
     validateNonBlankText(row.relationshipId, `${label} relationshipId`, errors);
-    validateDateValue(row.validStartDate, `${label} validStartDate`, errors);
-    validateDateValue(row.validEndDate, `${label} validEndDate`, errors);
+    if (!(row.sourceDerived === true && row.validStartDate === null && row.validEndDate === null && typeof row.sourceFile === "string")) {
+      validateDateValue(row.validStartDate, `${label} validStartDate`, errors);
+      validateDateValue(row.validEndDate, `${label} validEndDate`, errors);
+    }
     validateFlagValue(row.invalidReason, ["D", "U"], `${label} invalidReason`, errors);
     if (!Number.isInteger(row.sourceRow) || row.sourceRow < 2) errors.push(`${label} has invalid sourceRow.`);
   });
@@ -309,7 +371,7 @@ function validateHierarchyCounts(entry, rows, conceptIds, errors) {
 function validateDuplicateCodeCount(entry, concepts, errors) {
   const groups = new Map();
   for (const concept of concepts) {
-    const key = JSON.stringify([concept.vocabularyId, concept.conceptCode]);
+    const key = conceptCodeKey(concept.vocabularyId, concept.conceptCode);
     groups.set(key, (groups.get(key) ?? 0) + 1);
   }
   const expected = [...groups.values()].filter((count) => count > 1).length;

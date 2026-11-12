@@ -1,3 +1,5 @@
+import { sourceSystemValues } from "../model/sourceSystems.js";
+
 const SCORE = Object.freeze({
   exactConceptId: 1000,
   exactConceptCode: 900,
@@ -12,6 +14,7 @@ const SCORE = Object.freeze({
 });
 
 const FILTER_FIELDS = Object.freeze({
+  sourceSystem: ["sourceSystems"],
   vocabularyId: ["vocabularyId", "vocabulary_id"],
   domainId: ["domainId", "domain_id"],
   conceptClassId: ["conceptClassId", "concept_class_id"],
@@ -153,6 +156,16 @@ export class SearchService {
 
     this.nameIndex = buildLexicalIndex(nameEntries);
     this.synonymIndex = buildLexicalIndex(synonymEntries);
+  }
+
+  matchingConcepts(query = "") {
+    const normalized = normalizeSearchText(query);
+    if (this.facetQuery === normalized && this.facetMatches) return this.facetMatches;
+    this.facetQuery = normalized;
+    this.facetMatches = normalized
+      ? [...this.#scoreQuery(normalized, tokenizeSearchText(normalized)).keys()].map((ordinal) => this.concepts[ordinal]).filter(Boolean)
+      : this.concepts;
+    return this.facetMatches;
   }
 
   search({ query = "", filters = {}, page = 1, pageSize = 25, sort = null } = {}) {
@@ -477,7 +490,9 @@ function normalizeFilters(filters) {
 
 function matchesFilters(concept, filters) {
   for (const [key, allowed] of filters) {
-    if (!allowed.has(getField(concept, FILTER_FIELDS[key]))) return false;
+    if (key === "sourceSystem") {
+      if (!sourceSystemValues(concept).some(value => allowed.has(value))) return false;
+    } else if (!allowed.has(getField(concept, FILTER_FIELDS[key]))) return false;
   }
   return true;
 }

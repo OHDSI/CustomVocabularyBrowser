@@ -4,3 +4,11 @@ coverage/
 Thumbs.db
 *.log
 
+# Local source checkouts and vocabulary tables may contain private data.
+# Tracked files remain tracked; git add -f can override these rules.
+.source/
+*.[cC][sS][vV]
+*.[tT][sS][vV]
+# Generated package data is local-only, never application source.
+/browser/data/
+/local-data/

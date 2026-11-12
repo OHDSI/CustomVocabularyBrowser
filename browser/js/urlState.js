@@ -4,6 +4,7 @@ import { resolveSource } from "./services/sourceResolver.js";
 
 const BLANK_SENTINEL = "~blank~";
 const FILTER_PARAMETERS = Object.freeze({
+  sourceSystem: "source-system",
   vocabularyId: "vocabulary-id",
   domainId: "domain",
   conceptClassId: "class",
@@ -16,8 +17,15 @@ export function readUrlState(search = globalThis.location?.search ?? "") {
   const repository = parameters.get("repository");
   const ref = parameters.get("ref");
   const localSourceRequested = parameters.get("local-source") === "1";
+  const explicitSourceRequested = localSourceRequested || Boolean(repository);
   let source = localSourceRequested ? LOCAL_SOURCE_PLACEHOLDER : DEFAULT_SOURCE;
   if (!localSourceRequested && repository) source = resolveSource(`${repository}@${ref || "main"}`);
+  // Ignore legacy local URLs carrying data-derived state: local files cannot be
+  // reopened automatically, and their query/filters must not be re-exposed.
+  if (localSourceRequested) return {
+    source, explicitSourceRequested, localSourceRequested: true, selectedPackageId: null, query: "",
+    filters: {}, page: 1, pageSize: DEFAULT_PAGE_SIZE, sort: null, selectedConceptId: null,
+  };
 
   const filters = {};
   for (const [field, parameter] of Object.entries(FILTER_PARAMETERS)) {
@@ -31,6 +39,7 @@ export function readUrlState(search = globalThis.location?.search ?? "") {
 
   return {
     source,
+    explicitSourceRequested,
     localSourceRequested,
     selectedPackageId: parameters.get("vocabulary") || null,
     query: parameters.get("q") ?? "",
@@ -45,9 +54,19 @@ export function readUrlState(search = globalThis.location?.search ?? "") {
 export function createShareableUrl(state, currentUrl = globalThis.location?.href ?? "https://example.invalid/") {
   const url = new URL(currentUrl);
   const parameters = new URLSearchParams();
-  const source = state.source ?? DEFAULT_SOURCE;
+  const source = state.source === undefined ? DEFAULT_SOURCE : state.source;
+  if (!source) {
+    url.search = "";
+    url.hash = "";
+    return url.href;
+  }
   if (source.provider === "local-directory") {
+    // Query, package, filters, sort and selection may reveal private local data.
+    // Keep them in the in-memory store, never in history, shared URLs or referrers.
     parameters.set("local-source", "1");
+    url.search = parameters.toString();
+    url.hash = "";
+    return url.href;
   } else {
     parameters.set("repository", `${source.owner}/${source.repository}`);
     parameters.set("ref", source.ref);

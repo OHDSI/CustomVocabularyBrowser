@@ -67,31 +67,52 @@ test("URL parsing rejects unsafe repository input and falls back for invalid pos
   assert.equal(state.pageSize, 25);
 });
 
-test("local source URLs preserve browser state without exposing a folder path", () => {
-  const state = {
-    source: {
-      provider: "local-directory",
-      folderName: "Sensitive folder name",
-      canonical: "Local folder - Sensitive folder name",
-    },
-    selectedPackageId: "ALPHA",
-    query: "aspirin",
-    filters: {},
-    page: 2,
-    pageSize: 25,
-  };
-
-  const url = createShareableUrl(state, "https://example.test/browser/");
-  assert.match(url, /local-source=1/u);
-  assert.doesNotMatch(url, /Sensitive/u);
-  assert.doesNotMatch(url, /repository=/u);
-
+test("local source URLs contain no private state, while the live store retains it", () => {
+  const local = { provider: "local-directory", folderName: "Secret folder", canonical: "Local folder - Secret folder" };
+  const store = new BrowserStore({ source: local });
+  store.setSelectedPackage("Secret package");
+  store.setQuery("sensitive query");
+  store.setFilter("domainId", ["sensitive domain"]);
+  store.selectConcept("2099999999");
+  const url = createShareableUrl(store.getState(), "https://example.test/browser/?old=secret#secret");
+  assert.equal(url, "https://example.test/browser/?local-source=1");
+  assert.equal(store.getState().query, "sensitive query");
+  assert.deepEqual(store.getState().filters.domainId, ["sensitive domain"]);
+  assert.equal(store.getState().selectedConceptId, "2099999999");
   const parsed = readUrlState(new URL(url).search);
   assert.equal(parsed.localSourceRequested, true);
   assert.equal(parsed.source.provider, "local-directory");
-  assert.equal(parsed.selectedPackageId, "ALPHA");
-  assert.equal(parsed.query, "aspirin");
-  assert.equal(parsed.page, 2);
+  assert.equal(parsed.selectedPackageId, null);
+  assert.equal(parsed.query, "");
+  assert.equal(parsed.selectedConceptId, null);
+});
+
+test("legacy local URLs do not restore query, filters, selected IDs or other view state", () => {
+  const parsed = readUrlState("?local-source=1&q=private&domain=private&vocabulary=private&concept=123&page=4&sort=private");
+  assert.equal(parsed.query, "");
+  assert.deepEqual(parsed.filters, {});
+  assert.equal(parsed.selectedPackageId, null);
+  assert.equal(parsed.selectedConceptId, null);
+  assert.equal(parsed.page, 1);
+  assert.equal(parsed.sort, null);
+});
+
+test("switching from a local to a remote source never emits local state with remote URLs", () => {
+  const local = { provider: "local-directory", folderName: "Private" };
+  const store = new BrowserStore({ source: local });
+  store.setSelectedPackage("Private package");
+  store.setQuery("Private query");
+  store.setFilter("domainId", ["Private domain"]);
+  store.selectConcept("2099999999");
+  store.setSort("conceptName");
+  const emitted = [];
+  store.subscribe((state) => emitted.push(createShareableUrl(state, "https://example.test/browser/")));
+  store.setSource({ provider: "github", owner: "owner", repository: "repo", ref: "main" });
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0], "https://example.test/browser/?repository=owner%2Frepo&ref=main");
+  assert.equal(store.getState().query, "");
+  assert.deepEqual(store.getState().filters.domainId, []);
+  assert.equal(store.getState().sort, null);
 });
 
 test("store composes filters without discarding unrelated state and preserves OMOP blanks", () => {

@@ -9,8 +9,10 @@
     "build:data": "node scripts/build-browser-data.mjs",
     "validate:data": "node scripts/validate-browser-data.mjs",
     "benchmark": "node scripts/benchmark-search.mjs",
+    "preflight:publication": "node scripts/preflight-publication.mjs",
     "build:site": "node scripts/build-site.mjs",
-    "serve": "node scripts/serve-site.mjs"
+    "serve": "node scripts/serve-site.mjs",
+    "check:no-package-data": "node scripts/check-no-package-data.mjs"
   },
   "engines": {
     "node": ">=20"
