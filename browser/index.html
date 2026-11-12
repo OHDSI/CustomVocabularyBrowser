@@ -20,21 +20,24 @@
         <h1>Custom Vocabulary Browser</h1>
         <p class="lede">Search concepts, inspect mappings, and review source provenance.</p>
       </div>
+      <aside id="daily-wisdom" class="daily-wisdom" aria-label="Thought for the day">
+        <span id="wisdom-text"></span>
+        <button id="dismiss-wisdom" type="button" aria-label="Dismiss thought for today" title="Dismiss for today">×</button>
+      </aside>
     </header>
 
     <main class="page-shell">
       <section class="panel source-panel" aria-labelledby="source-heading">
         <div class="section-heading">
           <div>
-            <p class="step-label">Source</p>
-            <h2 id="source-heading">Choose a GitHub repository or local folder</h2>
+            <h2 id="source-heading">SELECT SOURCE</h2>
+            <p id="source-help" class="field-help">First visit loads TuftsCTSI/CVB. Choose another GitHub repository or a local folder.</p>
           </div>
-          <p id="active-source" class="source-chip" aria-live="polite"></p>
+          <p id="active-source" hidden></p>
         </div>
 
         <form id="source-form" class="source-form" novalidate>
           <div class="field source-field">
-            <label for="source-input">GitHub repository or URL</label>
             <input
               id="source-input"
               name="source"
@@ -42,42 +45,63 @@
               inputmode="url"
               autocomplete="off"
               spellcheck="false"
+              aria-label="GitHub repository or URL"
               aria-describedby="source-help"
               placeholder="owner/repository@ref or https://github.com/owner/repository"
               required
             >
-            <p id="source-help" class="field-help">
-              Public GitHub repositories only. Paste <code>owner/repository@ref</code> or a full GitHub URL; the ref defaults to <code>main</code>.
-            </p>
           </div>
           <div class="button-row source-actions">
             <button class="button button-primary" type="submit">Load source</button>
-            <button id="default-source" class="button button-secondary" type="button">Use default</button>
+            <button id="default-source" class="button button-secondary" type="button">Clear source</button>
             <button id="local-source" class="button button-secondary" type="button">Choose local folder</button>
+            <button id="cancel-local" class="button button-secondary" type="button" hidden>Cancel operation</button>
             <input id="local-folder-input" type="file" accept=".csv,text/csv" webkitdirectory multiple hidden>
           </div>
         </form>
-        <p class="local-source-help">
-          Local files stay on this computer and are processed only in browser memory. Select a vocabulary folder,
-          its <code>Ontology</code> folder, or a CVB-style repository root.
-        </p>
+        <div class="remember-settings">
+          <label class="remember-choice" for="remember-vocabulary">
+            <input id="remember-vocabulary" type="checkbox" aria-describedby="remember-help">
+            <span>Remember vocabulary on this device</span>
+          </label>
+          <details class="remember-details">
+            <summary>Storage details</summary>
+            <p id="remember-help" class="field-help">Keeps one copy in this browser and reopens it automatically. Each successful source load replaces it. Uncheck to remove it. Nothing is uploaded. Copies are not encrypted and may be cleared by the browser. Keep your original files. Reload the source to get updates.</p>
+          </details>
+        </div>
+        <p id="local-operation-status" class="field-help" role="status" aria-live="polite"></p>
 
-        <div class="field package-field">
-          <label for="package-select">Vocabulary package</label>
-          <select id="package-select" disabled>
-            <option value="">Load a source to see packages</option>
-          </select>
-          <p id="package-help" class="field-help">Unavailable packages remain visible with their validation status.</p>
+        <div class="source-tools">
+          <span id="package-label" class="field-label">Package scope</span>
+          <div class="source-tools-row">
+            <div class="field package-field">
+              <div id="package-picker" aria-labelledby="package-label"></div>
+              <select id="package-select" disabled hidden aria-label="Package scope">
+                <option value="">Load a source to see packages</option>
+              </select>
+              <p id="package-help" class="field-help">Select one or more available packages.</p>
+            </div>
+            <section id="review-workspace" aria-label="Review tools"></section>
+          </div>
         </div>
       </section>
 
+      <section id="status-panel" class="status-panel" aria-live="polite" aria-atomic="true" hidden>
+        <span id="status-indicator" class="status-indicator" aria-hidden="true"></span>
+        <div>
+          <strong id="status-title"></strong>
+          <p id="status-message"></p>
+        </div>
+      </section>
+
+      <div class="browse-workspace">
       <section class="panel search-panel" aria-labelledby="search-heading">
         <div class="section-heading search-heading-row">
           <div>
             <p class="step-label">Search</p>
             <h2 id="search-heading">Search concepts</h2>
           </div>
-          <button id="clear-all" class="button button-quiet" type="button">Clear all filters</button>
+          <button id="clear-all" class="button button-quiet" type="button">Reset filters</button>
         </div>
 
         <div class="search-row">
@@ -91,6 +115,10 @@
         </div>
 
         <div id="filter-grid" class="filter-grid">
+          <div class="field">
+            <label for="filter-source-system">Source system</label>
+            <select id="filter-source-system" data-filter="sourceSystem"></select>
+          </div>
           <div class="field">
             <label for="filter-vocabulary">Vocabulary</label>
             <select id="filter-vocabulary" data-filter="vocabularyId"></select>
@@ -114,14 +142,6 @@
         </div>
       </section>
 
-      <section id="status-panel" class="status-panel" aria-live="polite" aria-atomic="true" hidden>
-        <span id="status-indicator" class="status-indicator" aria-hidden="true"></span>
-        <div>
-          <strong id="status-title"></strong>
-          <p id="status-message"></p>
-        </div>
-      </section>
-
       <section class="panel results-panel" aria-labelledby="results-heading">
         <div class="results-toolbar">
           <div>
@@ -135,9 +155,14 @@
           </div>
         </div>
 
-        <div class="table-frame" tabindex="0" aria-label="Scrollable concept results">
+        <div id="results-frame" class="table-frame" tabindex="0" role="region" aria-label="Scrollable concept results" aria-describedby="results-scroll-help">
           <table id="results-table">
             <caption class="sr-only">OMOP custom vocabulary concept search results</caption>
+            <colgroup>
+              <col class="col-id"><col class="col-name">
+              <col class="col-domain"><col class="col-vocabulary"><col class="col-class"><col class="col-standard">
+              <col class="col-code"><col class="col-validity"><col class="col-source"><col class="col-match">
+            </colgroup>
             <thead>
               <tr>
                 <th scope="col" data-sort="conceptId">Concept ID</th>
@@ -148,6 +173,7 @@
                 <th scope="col" data-sort="standardConcept">Standard</th>
                 <th scope="col" data-sort="conceptCode">Code</th>
                 <th scope="col" data-sort="invalidReason">Validity</th>
+                <th scope="col">SOURCE SYSTEM</th>
                 <th scope="col">Match reason</th>
               </tr>
             </thead>
@@ -155,14 +181,23 @@
           </table>
         </div>
 
+        <div id="results-scroll-controls" class="results-scroll-controls" hidden>
+          <span id="results-scroll-label">Scroll columns</span>
+          <button id="results-scroll-left" class="button button-secondary" type="button" aria-label="Scroll result columns left" aria-controls="results-frame">&#8592;</button>
+          <input id="results-scroll-position" type="range" min="0" max="0" value="0" step="1" aria-labelledby="results-scroll-label" aria-describedby="results-scroll-help" aria-controls="results-frame">
+          <button id="results-scroll-right" class="button button-secondary" type="button" aria-label="Scroll result columns right" aria-controls="results-frame">&#8594;</button>
+        </div>
+        <p id="results-scroll-help" class="sr-only">Swipe the table horizontally or use Scroll columns. The slider supports arrow keys, Home and End.</p>
+
         <nav id="pagination" class="pagination" aria-label="Results pages"></nav>
       </section>
+      </div>
     </main>
 
     <dialog id="concept-dialog" class="concept-dialog" aria-labelledby="concept-dialog-title">
       <div class="dialog-header">
         <div>
-          <p class="step-label">Concept detail</p>
+          <p class="concept-title-label">Concept details</p>
           <h2 id="concept-dialog-title">Concept</h2>
         </div>
         <form method="dialog">

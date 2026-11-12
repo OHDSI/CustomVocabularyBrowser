@@ -2,20 +2,10 @@
 
 Custom Vocabulary Browser is a static web application for finding and reviewing
 OMOP-compatible concepts maintained outside the standard Athena distribution.
-It can search a built-in vocabulary snapshot, a compatible public GitHub
-repository, or CSV files selected from the user's computer.
-
-The browser supports concept ID, code, name, and synonym search; OMOP filters;
-concept provenance; incoming and outgoing relationships; and hierarchy data
-when a package supplies a usable ancestor table. It runs entirely as a static
-site and does not require an application server or database.
-
-> [!IMPORTANT]
-> This project is a review candidate. It is not currently an official OHDSI
-> service and its presence in this repository does not imply OHDSI endorsement.
-> If it passes technical, governance, security, and licensing review, it is
-> intended to be proposed for inclusion in, or linkage from, the appropriate
-> OHDSI repository as a separately testable component.
+On first use it loads TuftsCTSI/CVB@main from GitHub at runtime. A remembered copy
+takes priority unless the URL explicitly selects a different source. Users can
+choose another public GitHub repository, a local CSV folder, or clear the source. The application repository and
+new site builds contain code and static assets only, never vocabulary packages.
 
 ## Contents
 
@@ -41,7 +31,7 @@ site and does not require an application server or database.
 
 ## What is a custom vocabulary?
 
-The OMOP Common Data Model represents clinical meaning through concepts. A
+The OMOP CDM represents clinical meaning through concepts. A
 concept has an identifier, name, source code, domain, concept class, vocabulary,
 validity period, and standardization status. Relationships connect concepts to
 each other, while synonyms make the same concept discoverable through alternate
@@ -62,10 +52,6 @@ Custom concepts should follow OMOP conventions and should be reviewed before
 production use. This browser helps users inspect a custom package; it does not
 approve concepts, assign governance, or make a vocabulary standard.
 
-A **package ID** is the name of a folder discovered by this application. It is
-not the same thing as the OMOP `vocabulary_id` stored on each concept. One
-package may contain concepts from more than one `vocabulary_id`.
-
 Useful background:
 
 - [OHDSI](https://www.ohdsi.org/)
@@ -80,7 +66,7 @@ Useful background:
 - Supports normalized prefix, token, and bounded fuzzy matching for names and
   synonyms.
 - Uses deterministic ranking and pagination.
-- Filters by vocabulary, domain, concept class, standard concept status, and
+- Filters by source system, vocabulary, domain, concept class, standard concept status, and
   validity.
 - Displays concept source provenance and authoritative OMOP fields.
 - Displays synonyms and both incoming and outgoing relationships.
@@ -99,12 +85,26 @@ Useful background:
 
 ### 1. Select a source
 
-The source panel offers three choices:
+The source panel offers three actions:
 
-1. **Use default** loads the vocabulary snapshot bundled with the browser.
-2. **Load source** loads a compatible public GitHub repository.
-3. **Choose local folder** reads compatible CSV files selected from the user's
-   computer.
+1. **Choose local folder** reads CSV tables in browser memory without uploading.
+2. **Load source** explicitly loads a compatible public GitHub repository.
+3. **Clear source** returns to the empty application and discards loaded memory data, without removing the saved local copy.
+
+On first launch TuftsCTSI/CVB@main is selected and requested from GitHub.
+**Clear source** immediately empties the current view without loading the default.
+Reopening the base URL restores a remembered copy, or loads the default if none
+is available. An explicit repository or local-source URL takes precedence.
+After opt-in, a remembered copy reopens locally without contacting its source.
+Public GitHub loads resolve the selected ref to a commit once, then read files
+from GitHub's raw-content host at that commit. This uses one API request for a
+prebuilt source or two for repository discovery, rather than one per file.
+Existing rate limits still apply; wait for a reset or choose local files if
+GitHub refuses a request. No credentials or bundled vocabulary are required.
+
+The interface is usable without package data; search becomes available after a
+valid package is selected. Conversion, joins and search indexes are built on
+the fly from the chosen tables. Local conversion uses a Web Worker where available.
 
 After the source is loaded, select a ready vocabulary package. Incomplete or
 invalid packages remain visible but cannot be searched.
@@ -121,6 +121,7 @@ The available data-derived filters are:
 
 | Filter | Meaning |
 | --- | --- |
+| Source system | One or more source-system names supplied for the concept; `Not supplied` when absent. Separate from package and OMOP vocabulary. |
 | Vocabulary | The concept's OMOP `vocabulary_id` |
 | Domain | The concept's OMOP `domain_id` |
 | Concept class | The concept's OMOP `concept_class_id` |
@@ -128,7 +129,14 @@ The available data-derived filters are:
 | Validity | `D - Deprecated`, `U - Updated`, or `null - Valid` for blank |
 
 Filters are combined with search terms. Use **Clear** to clear only the search
-query or **Clear all filters** to reset the complete search state.
+query or **Reset filters** to reset the filters. Source-system selections are ORed
+within that filter and ANDed with the other filters; counts reflect search and
+other active filters.
+
+The results omit the Package column; package scope and provenance details remain
+available. **Scroll columns** stays at the bottom of the visible results area,
+with a draggable slider and left/right buttons. Use arrow keys, Home or End on
+the slider, or swipe the table on touch screens. The native scrollbar also remains.
 
 ### 4. Inspect a concept
 
@@ -144,14 +152,13 @@ can include:
 
 ## Supported source formats
 
-### Built-in source
+### No bundled data
 
-The default browser source is a validated, schema-versioned artifact snapshot
-stored under `browser/data/`. The manifest records the source repository, ref,
-and immutable commit SHA from which the artifacts were built.
-
-Generated JSON artifacts must not be edited manually. Rebuild them from the
-authoritative CSV source instead.
+Without an opted-in remembered copy or an explicit source URL, the application
+loads the public TuftsCTSI/CVB default at runtime. Neither `browser/data/manifest.json` nor any
+vocabulary package is required to build, serve or open it. A public repository
+may optionally provide prebuilt artifacts, but these are loaded only after the
+user explicitly selects that repository.
 
 ### Public GitHub repository
 
@@ -266,7 +273,7 @@ are treated as one review unit.
 | `domain_delta.csv` | Adds domain reference metadata |
 | `concept_class_delta.csv` | Adds concept class reference metadata |
 | `relationship_delta.csv` | Adds relationship definition metadata |
-| `mapping_metadata.csv` | Recognized in the package inventory; a dedicated UI view is not currently implemented |
+| `mapping_metadata.csv` | Mapping provenance, metadata and explicitly supplied source systems |
 
 Malformed optional hierarchy or reference data disable only the affected
 optional capability and produce a warning. Malformed required core data make
@@ -441,42 +448,26 @@ policy blocks `npm.ps1`.
 
 ## Build and validate browser data
 
-The committed default data can be rebuilt from a local checkout of a compatible
-vocabulary source repository:
+Data generation is optional tooling for a separate data repository or private
+external folder. It is not part of application startup, CI or deployment.
+An explicit output outside this application project is required, even when
+using the legacy `--public-source` flag. The output must be empty and must not
+overlap the source directory. Existing output files are never deleted; choose
+a fresh directory for each build.
 
 ```bash
 npm run build:data -- \
   --source /path/to/source-repository \
+  --output /path/outside/browser-project/artifacts \
   --repository owner/repository \
   --ref main \
   --commit 0123456789abcdef0123456789abcdef01234567
+npm run validate:data -- --data /path/outside/browser-project/artifacts
 ```
 
-All provenance arguments are required. `--commit` must identify the immutable
-source revision represented by the generated artifacts.
-
-Then validate and package the site:
-
-```bash
-npm run validate:data
-npm run benchmark
-npm run build:site
-```
-
-The data build writes:
-
-```text
-browser/data/manifest.json
-browser/data/vocabularies/<package-id>/concepts.json
-browser/data/vocabularies/<package-id>/search.json
-browser/data/vocabularies/<package-id>/synonyms.json
-browser/data/vocabularies/<package-id>/relationships.json
-browser/data/vocabularies/<package-id>/hierarchy.json     # when available
-browser/data/vocabularies/<package-id>/metadata.json      # when available
-```
-
-`npm run build:site` validates `browser/data/` and copies the deployable site to
-the ignored `dist/` directory.
+All provenance arguments are required. Generated artifacts stay separate from
+the application. `npm run build:site` packages only HTML, CSS, JavaScript and
+fonts into `dist/`; it does not copy a local `browser/data/` folder.
 
 ### npm commands
 
@@ -486,7 +477,8 @@ the ignored `dist/` directory.
 | `npm run build:data` | Builds browser JSON from authoritative CSV packages |
 | `npm run validate:data` | Performs semantic and index-integrity validation of generated artifacts |
 | `npm run benchmark` | Runs the search benchmark against a browseable package |
-| `npm run build:site` | Validates and packages the static site in `dist/` |
+| `npm run build:site` | Packages application assets only in `dist/` |
+| `npm run check:no-package-data` | Rejects tracked vocabulary data, raw tables and build output |
 | `npm run serve` | Serves `dist/` at `http://127.0.0.1:4173/` |
 
 ## Project structure
@@ -495,7 +487,6 @@ the ignored `dist/` directory.
 .
 ├── browser/                 # deployable application source
 │   ├── css/                 # application styles
-│   ├── data/                # generated manifest and vocabulary artifacts
 │   ├── fonts/               # locally bundled font and font license
 │   ├── js/                  # model, services, store, URL state, and UI modules
 │   └── index.html
@@ -515,7 +506,7 @@ Run the complete suite before every pull request:
 
 ```bash
 npm test
-npm run validate:data
+npm run check:no-package-data
 npm run build:site
 ```
 
@@ -530,19 +521,21 @@ The tests cover:
 - generated artifact integrity and source provenance;
 - safe local static serving.
 
-CI performs tests, rebuilds data from the pinned vocabulary source, validates
-the result, and packages the site. A failed test, build, or data validation step
-prevents deployment.
+CI uses synthetic in-memory fixtures, rejects tracked package data and builds
+the data-free application. It never checks out a vocabulary repository.
+Startup tests verify the default GitHub request and explicit/remembered-source
+precedence. Local-import and clear-source tests verify that neither triggers
+an additional vocabulary network request.
 
 ## Deployment
 
 The application is designed for GitHub Pages:
 
 1. Configure GitHub Pages to use **GitHub Actions** as its source.
-2. Ensure the workflow can read the configured public vocabulary source.
+2. Ensure no vocabulary package data remains tracked in this application repository.
 3. Run or merge through the deployment branch.
-4. The workflow tests the application, rebuilds and validates data, creates
-   `dist/`, and uploads the static Pages artifact.
+4. The workflow tests the application, checks the data boundary, creates
+   app-only `dist/`, and uploads the static Pages artifact.
 
 The current deployment workflow runs automatically from `main`. The test
 workflow runs for pull requests and pushes to `main` or `dev`.
@@ -551,6 +544,11 @@ No server-side application, database, secret, or GitHub token is required by
 the deployed browser for public repository access.
 
 ## Privacy and security
+
+- The public build contains no package tables or generated vocabulary JSON.
+- Ignore rules do not remove already tracked data. Existing tracked data must be
+  reviewed and removed from tracking separately, preserving local originals.
+  This change does not rewrite Git history or delete previously published data.
 
 - Repository input is restricted to public `github.com` repositories.
 - Embedded credentials, query strings, fragments, unsafe paths, and unsupported
@@ -573,13 +571,13 @@ vocabulary repository.
 - GitHub unauthenticated API rate limits can temporarily prevent discovery.
 - Very large GitHub trees may require prebuilt browser artifacts.
 - The browser does not write changes back to CSV files or repositories.
-- The browser does not assign concept IDs or author mappings.
+- The browser does not allocate concept IDs. It can prepare local review drafts, but does not submit or approve mappings.
 - Baseline OMOP concepts referenced only by relationship ID are not fetched
   from Athena and are shown as unresolved external endpoints.
 - Orphan synonym rows are reported but cannot be attached to a concept that is
   absent from the selected package.
-- Local-folder permission is not persistent; the user must select the folder
-  again after reload.
+- Local-folder permission is not persistent. After reload, select the folder
+  again or explicitly reopen a previously saved browser copy.
 - This is not a complete replacement for Athena or an OMOP vocabulary release
   process.
 
@@ -598,7 +596,7 @@ directory and that their headers and values satisfy the contract above.
 ### GitHub returns HTTP 403
 
 The unauthenticated API rate limit was probably reached. Wait for the limit to
-reset, use the built-in source, select a local folder, or publish compatible
+reset, select a local folder, or use compatible
 prebuilt browser artifacts in the source repository.
 
 ### The page works through the local server but not by double-clicking HTML
@@ -611,8 +609,8 @@ Contributions should be small, reviewable, and covered by tests.
 
 1. Create a feature branch from the repository's active development branch.
 2. Make one focused change.
-3. Do not edit generated browser artifacts manually.
-4. Run `npm test`, `npm run validate:data`, and `npm run build:site`.
+3. Keep vocabulary packages and generated artifacts outside this application repository.
+4. Run `npm test`, `npm run check:no-package-data`, and `npm run build:site`.
 5. Review the staged file list and exclude local data, credentials, and build
    output.
 6. Open a pull request describing behavior changes, validation evidence, and
@@ -622,43 +620,26 @@ Changes to the three-file browseability requirement, accepted schemas, artifact
 schema version, search ranking, or source security model require explicit
 maintainer review.
 
-## Proposed OHDSI integration
+## OHDSI Integration
 
-This project is currently maintained as an independent review candidate. If it
-passes review, the intended next step is to add it to the appropriate OHDSI
-repository or organization as a distinct browser component.
+The Custom Vocabulary Browser is an open-source component of the OHDSI ecosystem, maintained in the OHDSI GitHub organization. It helps users explore custom vocabularies and their relationships alongside the OMOP Standardized Vocabularies.
 
-The final integration mechanism has not been selected. Depending on maintainer
-preference, it may be a repository transfer, a Git submodule, a subtree, or a
-maintained directory within another repository. The term "subrepository" in
-project discussions describes this intended relationship; it is not yet a
-chosen Git implementation.
+Community members are welcome to report issues, suggest improvements, and contribute to the project through GitHub.
 
-Before integration, reviewers should confirm at least:
-
-- ownership and maintainer responsibilities;
-- compatibility with OHDSI contribution and governance requirements;
-- project-level licensing and third-party asset notices;
-- security and privacy review;
-- accessibility and supported-browser expectations;
-- CI, GitHub Pages, branch-protection, and release configuration;
-- vocabulary provenance and artifact-refresh responsibilities;
-- whether the default vocabulary source is appropriate for OHDSI hosting.
-
-Until those decisions are recorded and approved, the application should not be
-presented as an official OHDSI tool.
+**Maintainers:** Polina Talapova, Maksym Trofymenko, and Jared Houghtaling.
 
 ## License
 
-A project-level software license has not yet been added to this repository. A
-compatible license must be selected and committed before external distribution
-or OHDSI integration.
+This project is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
 
-Roboto Condensed is bundled under the SIL Open Font License. Its license notice
-is stored at [browser/fonts/OFL.txt](browser/fonts/OFL.txt).
+Roboto Condensed is bundled under the SIL Open Font License. Its license notice is available in [browser/fonts/OFL.txt](browser/fonts/OFL.txt).
 
 ## Acknowledgements
 
-The visual language is inspired by Athena. OMOP and OHDSI names are used to
-describe compatibility and the intended review context; they do not imply
-official endorsement.
+We are grateful to **Dr. Andrew E. Williams** for the inspiration and vision behind the project, and to **Maksym Trofymenko** for his contributions to its early development.
+
+We also thank the **OHDSI community** for providing a collaborative home for the project and supporting open approaches to health data standardization.
+
+The browser's visual design draws inspiration from **Athena**, the OHDSI vocabulary exploration tool.
+
+The current version was developed by the project contributors with support from Zhorik, an OpenAI Dot assistant, using Codex for coding tasks.

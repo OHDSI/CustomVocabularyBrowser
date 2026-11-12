@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { DEFAULT_SOURCE } from "../../browser/js/config.js";
 import { VocabularyRepository } from "../../browser/js/services/dataService.js";
+import { directHierarchy } from "../../browser/js/ui/conceptDetails.js";
 import {
   discoverGitHubManifest,
   loadSourceManifest,
@@ -188,6 +189,119 @@ test("VocabularyRepository loads essential artifacts and resolves detail directi
   assert.equal(details.outgoing[0].relationshipId, "Maps to");
   assert.equal(details.outgoing[0].otherConcept, null);
   assert.equal(details.incoming.length, 0);
+});
+
+test("source-declared OMOP target requires matching evidence for this exact ID and vocabulary", async () => {
+  for (const [targetId, vocabulary, expected] of [["456","SNOMED",false],["123","LOINC",false],["123","SNOMED",true]]) {
+    const manifest = await loadSourceManifest(DEFAULT_SOURCE, {
+      localManifestUrl:"https://example.test/data/manifest.json",fetchImpl:async()=>responseJson(manifestFixture),
+    });
+    const modified = structuredClone(artifacts);
+    const row = modified["relationships.json"].rows[0];
+    row.otherConceptOmop = {conceptId:"123",vocabularyId:"SNOMED",sourceDeclared:true};
+    row.mappingMetadata = [{source_concept_id:concept.conceptId,source_code:"001",source_vocabulary_id:"A",
+      objectConceptId:targetId,target_concept_id:targetId,target_vocabulary_id:vocabulary}];
+    const fetchImpl = async (url) => responseText(JSON.stringify(modified[new URL(url).pathname.split("/").at(-1)]));
+    const repository = new VocabularyRepository({manifest,source:DEFAULT_SOURCE,fetchImpl});
+    const details = await repository.loadConceptDetails("ALPHA",concept.conceptId);
+    assert.equal(Boolean(details.outgoing[0].otherConceptOmop),expected);
+  }
+});
+
+test("stale artifacts cannot hide invalid or conflicting source identity fields", async () => {
+  for (const sourceFields of [
+    {source_concept_id:"bad",source_code:"001",source_description:"Alpha"},
+    {source_concept_id:concept.conceptId,subject_id:"OMOP:999",source_code:"001"},
+    {source_concept_id:concept.conceptId,subject_id:"A:WRONG",source_code:"001"},
+    {source_concept_id:concept.conceptId,source_description:"Wrong",source_code:"001"},
+  ]) {
+    const manifest = await loadSourceManifest(DEFAULT_SOURCE, {
+      localManifestUrl:"https://example.test/data/manifest.json",fetchImpl:async()=>responseJson(manifestFixture),
+    });
+    const modified = structuredClone(artifacts);
+    const row = modified["relationships.json"].rows[0];
+    row.otherConceptOmop = {conceptId:"123",vocabularyId:"SNOMED",sourceDeclared:true};
+    row.mappingMetadata = [{...sourceFields,objectConceptId:"123",target_concept_id:"123",target_vocabulary_id:"SNOMED"}];
+    const fetchImpl = async (url) => responseText(JSON.stringify(modified[new URL(url).pathname.split("/").at(-1)]));
+    const repository = new VocabularyRepository({manifest,source:DEFAULT_SOURCE,fetchImpl});
+    const details = await repository.loadConceptDetails("ALPHA",concept.conceptId);
+    assert.equal(details.outgoing[0].mappingMetadata.length,0);
+    assert.equal(details.outgoing[0].otherConceptOmop,undefined);
+  }
+});
+
+test("stale metadata target IDs are revalidated in both outgoing and incoming hierarchy", async () => {
+  const target = {...concept,conceptId:"2000000002",conceptName:"Beta",conceptCode:"TGT",vocabularyId:"B"};
+  const cases = [
+    {label:"correct",code:"TGT",expected:true},
+    {label:"wrong code",code:"WRONG",expected:false},
+    {label:"conflicting explicit ID",code:"TGT",targetId:"999",expected:false},
+    {label:"duplicate code",code:"TGT",duplicate:true,expected:false},
+    {label:"duplicate source identity",code:"TGT",duplicateSource:true,expected:false},
+    {label:"explicit source ID disambiguates",code:"TGT",duplicateSource:true,sourceId:concept.conceptId,expected:true},
+  ];
+  for (const item of cases) {
+    const fixture = structuredClone(manifestFixture);
+    fixture.vocabularies[0].artifacts.metadata = "vocabularies/ALPHA/metadata.json";
+    const manifest = await loadSourceManifest(DEFAULT_SOURCE, {localManifestUrl:"https://example.test/data/manifest.json",fetchImpl:async()=>responseJson(fixture)});
+    const modified = structuredClone(artifacts);
+    modified["concepts.json"].concepts.push(target);
+    if (item.duplicate) modified["concepts.json"].concepts.push({...target,conceptId:"2000000003"});
+    if (item.duplicateSource) modified["concepts.json"].concepts.push({...concept,conceptId:"2000000003"});
+    const mapping = {subjectConceptId:concept.conceptId,objectConceptId:target.conceptId,subjectCode:"001",subjectVocabulary:"A",
+      source_description:"Alpha",objectCode:item.code,objectVocabulary:"B",predicate_id:"skos:broadMatch",
+      mapping_concept_code:`001|| - ||A|| - ||${item.code}|| - ||B`,associationStatus:"subject-only",
+      ...(item.sourceId ? {source_concept_id:item.sourceId} : {}),
+      ...(item.targetId ? {target_concept_id:item.targetId} : {})};
+    modified["metadata.json"] = {schemaVersion:"2.0",packageId:"ALPHA",tables:{mappingMetadata:[mapping]}};
+    const fetchImpl = async url => responseText(JSON.stringify(modified[new URL(url).pathname.split("/").at(-1)]));
+    const repository = new VocabularyRepository({manifest,source:DEFAULT_SOURCE,fetchImpl});
+    const sourceDetails = await repository.loadConceptDetails("ALPHA",concept.conceptId);
+    const targetDetails = await repository.loadConceptDetails("ALPHA",target.conceptId);
+    assert.equal(Boolean(sourceDetails.concept.mappingMetadata[0]?.targetIdentityVerified),item.expected,item.label);
+    assert.equal(directHierarchy(sourceDetails).parents.some(x=>x.id===target.conceptId),item.expected,item.label);
+    assert.equal(directHierarchy(targetDetails).children.some(x=>x.id===concept.conceptId),item.expected,item.label);
+  }
+});
+
+test("metadata for another target is not displayed on an unrelated relationship", async () => {
+  const manifest = await loadSourceManifest(DEFAULT_SOURCE, {
+    localManifestUrl:"https://example.test/data/manifest.json",fetchImpl:async()=>responseJson(manifestFixture),
+  });
+  const modified = structuredClone(artifacts);
+  const row = modified["relationships.json"].rows[0];
+  row.otherConceptOmop = {conceptId:"123",vocabularyId:"SNOMED",sourceDeclared:true};
+  row.mappingMetadata = [{source_concept_id:concept.conceptId,source_code:"001",source_vocabulary_id:"A",
+    objectConceptId:"999",target_concept_id:"999",target_vocabulary_id:"SNOMED",predicate_id:"skos:broadMatch",author_label:"Wrong author"}];
+  const fetchImpl = async url => responseText(JSON.stringify(modified[new URL(url).pathname.split("/").at(-1)]));
+  const repository = new VocabularyRepository({manifest,source:DEFAULT_SOURCE,fetchImpl});
+  const details = await repository.loadConceptDetails("ALPHA",concept.conceptId);
+  assert.equal(details.outgoing[0].mappingMetadata.length,0);
+  assert.equal(details.outgoing[0].otherConceptOmop,undefined);
+});
+
+test("external metadata targets need consistent explicit code, vocabulary and ID evidence", async () => {
+  const fixture = structuredClone(manifestFixture);
+  fixture.vocabularies[0].artifacts.metadata = "vocabularies/ALPHA/metadata.json";
+  const cases = [
+    {label:"missing evidence",evidence:null,expected:false},
+    {label:"wrong code",evidence:{file:"ALPHA/Mapping/a.csv",row:2,conceptId:"123",conceptCode:"WRONG",vocabularyId:"SNOMED"},expected:false},
+    {label:"matching evidence",evidence:{file:"ALPHA/Mapping/a.csv",row:2,conceptId:"123",conceptCode:"Z",vocabularyId:"SNOMED"},expected:true},
+  ];
+  for (const item of cases) {
+    const manifest = await loadSourceManifest(DEFAULT_SOURCE, {localManifestUrl:"https://example.test/data/manifest.json",fetchImpl:async()=>responseJson(fixture)});
+    const modified = structuredClone(artifacts);
+    const mapping = {subjectConceptId:concept.conceptId,objectConceptId:"123",subjectCode:"001",subjectVocabulary:"A",
+      source_description:"Alpha",objectCode:"Z",objectVocabulary:"SNOMED",predicate_id:"skos:broadMatch",
+      mapping_concept_code:"001|| - ||A|| - ||Z|| - ||SNOMED",associationStatus:"subject-only",
+      ...(item.evidence ? {targetIdentityEvidence:item.evidence} : {})};
+    modified["metadata.json"] = {schemaVersion:"2.0",packageId:"ALPHA",tables:{mappingMetadata:[mapping]}};
+    const fetchImpl = async url => responseText(JSON.stringify(modified[new URL(url).pathname.split("/").at(-1)]));
+    const repository = new VocabularyRepository({manifest,source:DEFAULT_SOURCE,fetchImpl});
+    const details = await repository.loadConceptDetails("ALPHA",concept.conceptId);
+    assert.equal(details.concept.mappingMetadata[0].targetIdentityVerified,item.expected,item.label);
+    assert.equal(directHierarchy(details).parents.some(x=>x.id==="123"),item.expected,item.label);
+  }
 });
 
 test("VocabularyRepository calls browser fetch without an invalid method receiver", async () => {

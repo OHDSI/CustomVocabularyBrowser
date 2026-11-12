@@ -1,0 +1,24 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createResultsScroller } from "../../browser/js/ui/resultsScroller.js";
+import { Node } from "../helpers/syntheticDom.js";
+test("horizontal controls synchronize both ways, clamp, resize and hide for empty results", t => {
+ const saved = globalThis.document;
+ const ids = ["results-frame", "results-table", "results-scroll-controls", "results-scroll-position", "results-scroll-left", "results-scroll-right"];
+ const nodes = Object.fromEntries(ids.map(id => [id, new Node("div", [])]));
+ globalThis.document = { getElementById: id => nodes[id] };
+ t.after(() => { globalThis.document = saved; });
+ const frame = nodes["results-frame"], slider = nodes["results-scroll-position"], controls = nodes["results-scroll-controls"];
+ frame.clientWidth = 400; frame.scrollWidth = 1400; frame.scrollLeft = 0;
+ const scroller = createResultsScroller();
+ const ready = { dataset: {}, results: { total: 100 } };
+ scroller.render(ready);
+ assert.equal(controls.hidden, false); assert.equal(slider.max, "1000"); assert.equal(nodes["results-scroll-left"].disabled, true);
+ slider.value = "800"; slider.emit("input"); assert.equal(frame.scrollLeft, 800);
+ nodes["results-scroll-right"].click(); assert.equal(frame.scrollLeft, 1000); assert.equal(nodes["results-scroll-right"].disabled, true);
+ nodes["results-scroll-left"].click(); assert.equal(frame.scrollLeft, 700);
+ frame.scrollLeft = 250; frame.emit("scroll"); assert.equal(slider.value, "250"); assert.equal(slider.attributes["aria-valuetext"], "25% across result columns");
+ frame.clientWidth = 1400; scroller.render(ready); assert.equal(controls.hidden, true);
+ frame.clientWidth = 400; scroller.render({ dataset: {}, results: { total: 0 } }); assert.equal(controls.hidden, true);
+ scroller.render({ dataset: null, results: { total: 0 } }); assert.equal(controls.hidden, true);
+});

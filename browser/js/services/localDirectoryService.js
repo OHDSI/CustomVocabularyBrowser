@@ -1,5 +1,5 @@
 import { MANIFEST_SCHEMA_VERSION } from "../config.js";
-import { RECOGNIZED_FILES, REQUIRED_FILES, SourceLoadError } from "./manifestService.js";
+import { discoverMappingFiles, FILE_ALIASES, RECOGNIZED_FILES, REQUIRED_FILES, SourceLoadError } from "./manifestService.js";
 
 const REQUIRED_KEYS = Object.freeze(["concept", "synonym", "relationship"]);
 
@@ -44,7 +44,7 @@ export async function createLocalDirectorySource(files) {
 export function discoverLocalPackages(folderName, files) {
   const grouped = new Map();
   const keyByFilename = new Map(
-    Object.entries(RECOGNIZED_FILES).map(([key, filename]) => [filename, key]),
+    Object.entries(FILE_ALIASES).flatMap(([key, filenames]) => filenames.map((filename) => [filename, key])),
   );
 
   for (const repositoryPath of files.keys()) {
@@ -54,6 +54,12 @@ export function discoverLocalPackages(folderName, files) {
     if (!key) continue;
     const sourcePath = segments.slice(0, -1).join("/");
     if (!grouped.has(sourcePath)) grouped.set(sourcePath, {});
+    if (grouped.get(sourcePath)[key]) {
+      throw new SourceLoadError(
+        `Conflicting files for ${key}: ${grouped.get(sourcePath)[key]}, ${repositoryPath}. Keep exactly one naming variant.`,
+        "LOCAL_TABLE_CONFLICT",
+      );
+    }
     grouped.get(sourcePath)[key] = repositoryPath;
   }
 
@@ -69,6 +75,9 @@ export function discoverLocalPackages(folderName, files) {
         );
       }
       seenPackageIds.add(packageId);
+      for (const [index, mappingPath] of discoverMappingFiles(sourcePath, new Set(files.keys())).entries()) {
+        packageFiles[`mappingSource${index}`] = mappingPath;
+      }
       const missing = REQUIRED_KEYS.filter((key) => !packageFiles[key]);
       const browseable = missing.length === 0;
       return {

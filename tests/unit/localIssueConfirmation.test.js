@@ -1,0 +1,45 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createLocalIssueConfirmationGate } from "../../browser/js/ui/reviewWorkspace.js";
+const draft = { kind: "concept", status: "draft-not-submitted", record: { concept_name: "Private name & more" }, metadata: { rationale: "Sensitive test text" } };
+const repository = "OHDSI/CustomVocabularyBrowser";
+test("local draft disclosure exactly matches the title and complete body sent after one confirmation", () => {
+  const gate = createLocalIssueConfirmationGate();
+  const opened = [];
+  const shown = gate.prepare(draft, repository);
+  assert.deepEqual(opened, []);
+  assert.equal(shown.recipient, `https://github.com/${repository}/issues/new`);
+  assert.equal(shown.includesJson, true);
+  assert.match(shown.body, /Sensitive test text/);
+  assert.equal(gate.confirm(draft, repository, url => opened.push(url)), true);
+  assert.equal(opened.length, 1);
+  const sent = new URL(opened[0]);
+  assert.equal(sent.origin, "https://github.com");
+  assert.equal(sent.pathname, `/${repository}/issues/new`);
+  assert.equal(shown.title, sent.searchParams.get("title"));
+  assert.equal(shown.body, sent.searchParams.get("body"));
+  assert.equal(gate.confirm(draft, repository, url => opened.push(url)), false);
+  assert.equal(opened.length, 1);
+});
+test("cancel, changed draft or changed destination never opens a link", () => {
+  const gate = createLocalIssueConfirmationGate(); const opened = [];
+  gate.prepare(draft, repository); gate.cancel();
+  assert.equal(gate.confirm(draft, repository, url => opened.push(url)), false);
+  gate.prepare(draft, repository);
+  assert.equal(gate.confirm({ ...draft }, repository, url => opened.push(url)), false);
+  gate.prepare(draft, repository);
+  assert.equal(gate.confirm(draft, "Other/Repo", url => opened.push(url)), false);
+  assert.deepEqual(opened, []);
+});
+test("oversized disclosure shows the actual fallback body and private title, with no JSON hidden in URL", () => {
+  const gate = createLocalIssueConfirmationGate();
+  const large = { ...draft, metadata: { rationale: "PRIVATE CONTENT ".repeat(5000) } };
+  const shown = gate.prepare(large, repository); const opened = [];
+  assert.equal(shown.includesJson, false);
+  assert.match(shown.title, /Private name/);
+  assert.match(shown.body, /Add JSON draft here/);
+  assert.doesNotMatch(shown.body, /PRIVATE CONTENT/);
+  gate.confirm(large, repository, url => opened.push(url));
+  assert.equal(shown.title, new URL(opened[0]).searchParams.get("title"));
+  assert.equal(shown.body, new URL(opened[0]).searchParams.get("body"));
+});

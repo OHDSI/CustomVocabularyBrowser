@@ -6,7 +6,7 @@ export function createStatusView() {
   return {
     render(state) {
       const status = state.status;
-      const visible = status.phase !== "idle" && Boolean(status.message);
+      const visible = status.phase !== "idle" && status.phase !== "ready" && Boolean(status.message);
       panel.hidden = !visible;
       if (!visible) return;
       panel.dataset.phase = status.phase;
@@ -19,6 +19,7 @@ export function createStatusView() {
 function statusTitle(phase) {
   if (phase === "error") return "Unable to continue";
   if (phase === "unavailable") return "Package unavailable";
+  if (phase === "awaiting-source") return "Choose a source";
   if (phase === "awaiting-local") return "Choose local folder";
   if (phase.startsWith("loading")) return "Loading";
   return "Ready";
